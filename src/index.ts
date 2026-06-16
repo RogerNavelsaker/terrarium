@@ -8,7 +8,7 @@ import type { Issue } from "./types.ts";
 const program = new Command();
 
 program
-	.name("seeds-triage")
+	.name("seeds-viewer")
 	.description("Standalone graph triage for seeds issues")
 	.option("-d, --dir <path>", "Directory containing .seeds", ".")
 	.option("--json", "Output as JSON")
