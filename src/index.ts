@@ -85,15 +85,16 @@ program
 			const scoreStr = `${(entry.score * 100).toFixed(0)}pts`;
 			const cpStr = entry.criticalPathLength > 0 ? ` · cp:${entry.criticalPathLength}` : "";
 			const bStr = entry.betweenness > 0.01 ? ` · btw:${entry.betweenness.toFixed(2)}` : "";
-			console.log(`${entry.id} (${entry.status}) - ${entry.title}`);
-			console.log(`    score: ${scoreStr}${cpStr}${bStr}`);
+			console.log(`\x1b[1m${entry.id}\x1b[0m (${entry.status}) - ${entry.title}`);
+			console.log(`    score: \x1b[36m${scoreStr}\x1b[0m${cpStr}${bStr}`);
 		}
-		console.log(`\n${output.length} ready issue(s) (ranked by graph score)`);
+		console.log(`\n\x1b[32m${output.length} ready issue(s)\x1b[0m (ranked by graph score)`);
 	});
 
 program
 	.command("graph")
-	.description("Export the dependency graph as a Graphviz DOT string")
+	.description("Print a pretty tree of the dependency graph")
+	.option("--json", "Output nodes and edges as JSON")
 	.option("--open-only", "Only include open issues")
 	.action(async (opts) => {
 		let issues = await loadIssues(program.opts().dir);
@@ -102,26 +103,72 @@ program
 			issues = issues.filter((i) => i.status !== "closed");
 		}
 
-		console.log("digraph G {");
-		console.log('  node [shape="box", style="rounded"];');
-		console.log('  rankdir="LR";');
-
-		const ids = new Set(issues.map((i) => i.id));
-
-		for (const issue of issues) {
-			const label = `${issue.id}\\n${issue.title}\\n[${issue.status}]`.replace(/"/g, '\\"');
-			console.log(`  "${issue.id}" [label="${label}"];`);
+		if (opts.json) {
+			const nodes = issues.map(i => ({ id: i.id, title: i.title, status: i.status }));
+			const edges: { source: string; target: string }[] = [];
+			const ids = new Set(issues.map(i => i.id));
+			for (const issue of issues) {
+				for (const blocked of issue.blocks ?? []) {
+					if (ids.has(blocked)) edges.push({ source: issue.id, target: blocked });
+				}
+			}
+			console.log(JSON.stringify({ success: true, command: "graph", nodes, edges }, null, 2));
+			return;
 		}
 
+		const blocksMap = new Map<string, string[]>();
+		const issueMap = new Map<string, Issue>();
+		
+		for (const issue of issues) {
+			blocksMap.set(issue.id, issue.blocks ?? []);
+			issueMap.set(issue.id, issue);
+		}
+
+		// Find roots: issues that are not blocked by any other issue in our current set
+		const blockedSet = new Set<string>();
 		for (const issue of issues) {
 			for (const blocked of issue.blocks ?? []) {
-				if (ids.has(blocked)) {
-					console.log(`  "${issue.id}" -> "${blocked}";`);
-				}
+				blockedSet.add(blocked);
+			}
+		}
+		const roots = issues.filter(i => !blockedSet.has(i.id));
+
+		function printTree(issueId: string, prefix: string, isLast: boolean, visited: Set<string>) {
+			const issue = issueMap.get(issueId);
+			if (!issue) return;
+			
+			const connector = isLast ? "└── " : "├── ";
+			const hasVisited = visited.has(issueId);
+			
+			// Color open/closed status
+			const statusColor = issue.status === "closed" ? "\x1b[90m" : "\x1b[32m";
+			const statusStr = `${statusColor}(${issue.status})\x1b[0m`;
+			
+			console.log(`${prefix}${connector}\x1b[1m${issue.id}\x1b[0m ${statusStr} - ${issue.title}${hasVisited ? " \x1b[33m(already shown)\x1b[0m" : ""}`);
+			
+			if (hasVisited) return;
+			visited.add(issueId);
+			
+			const children = blocksMap.get(issueId) || [];
+			// Filter to ensure children exist in map (in case of open-only filter)
+			const validChildren = children.filter(c => issueMap.has(c));
+			
+			for (let i = 0; i < validChildren.length; i++) {
+				const newPrefix = prefix + (isLast ? "    " : "│   ");
+				printTree(validChildren[i], newPrefix, i === validChildren.length - 1, visited);
 			}
 		}
 
-		console.log("}");
+		if (roots.length === 0 && issues.length > 0) {
+			console.log("\x1b[31mGraph has cycles and no roots. Showing arbitrary nodes.\x1b[0m");
+			roots.push(issues[0]);
+		}
+
+		const visited = new Set<string>();
+		for (let i = 0; i < roots.length; i++) {
+			printTree(roots[i].id, "", i === roots.length - 1, visited);
+			if (i < roots.length - 1) console.log(""); // spacing
+		}
 	});
 
 program.parse();
