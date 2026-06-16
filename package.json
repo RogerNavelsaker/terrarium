@@ -1,8 +1,8 @@
 {
-  "name": "seeds-viewer",
+  "name": "terrarium",
   "module": "src/index.ts",
   "bin": {
-    "seeds-viewer": "./src/index.ts"
+    "terrarium": "./src/index.ts"
   },
   "type": "module",
   "private": true,
