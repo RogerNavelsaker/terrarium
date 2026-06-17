@@ -100,10 +100,12 @@ program
 
 program
 	.command("graph")
-	.description("Print a pretty tree of the dependency graph")
+	.description("Print a pretty tree of the dependency graph or specific graph insights")
 	.option("--json", "Output nodes and edges as JSON")
 	.option("--dot", "Output in Graphviz DOT format")
 	.option("--open-only", "Only include open issues")
+	.option("--critical-path", "Show the longest dependency chain")
+	.option("--bottlenecks", "Show issues with highest betweenness centrality")
 	.action(async (opts) => {
 		let issues = await loadIssues(program.opts().dir);
 
@@ -147,6 +149,63 @@ program
 				}
 			}
 			console.log("}");
+			return;
+		}
+
+		if (opts.bottlenecks) {
+			const metrics = computeMetrics(issues);
+			const ranked = issues
+				.map((i) => ({ ...i, betweenness: metrics.get(i.id)?.betweenness ?? 0 }))
+				.filter((i) => i.betweenness > 0)
+				.sort((a, b) => b.betweenness - a.betweenness);
+			console.log("\x1b[1mTop Bottlenecks (Betweenness Centrality)\x1b[0m\n");
+			for (const issue of ranked.slice(0, 10)) {
+				console.log(
+					`\x1b[36m${issue.betweenness.toFixed(4)}\x1b[0m - \x1b[1m${issue.id}\x1b[0m ${issue.title}`,
+				);
+			}
+			if (ranked.length === 0) console.log("No significant bottlenecks found.");
+			return;
+		}
+
+		if (opts.criticalPath) {
+			const metrics = computeMetrics(issues);
+			let startNode = issues[0]?.id;
+			let maxLen = -1;
+			for (const issue of issues) {
+				const len = metrics.get(issue.id)?.criticalPathLength ?? 0;
+				if (len > maxLen) {
+					maxLen = len;
+					startNode = issue.id;
+				}
+			}
+			if (!startNode || maxLen === 0) {
+				console.log("No critical path found.");
+				return;
+			}
+			console.log(`\x1b[1mCritical Path (Length: ${maxLen})\x1b[0m\n`);
+			const blocksMap = new Map<string, string[]>();
+			for (const issue of issues) blocksMap.set(issue.id, issue.blocks ?? []);
+
+			let curr: string | undefined = startNode;
+			while (curr) {
+				const issue = issues.find((i) => i.id === curr);
+				if (!issue) break;
+				console.log(`\x1b[32m↓\x1b[0m \x1b[1m${issue.id}\x1b[0m ${issue.title}`);
+				const children = blocksMap.get(curr) ?? [];
+				if (children.length === 0) break;
+
+				let nextNode = children[0];
+				let maxChildLen = -1;
+				for (const child of children) {
+					const l = metrics.get(child)?.criticalPathLength ?? 0;
+					if (l > maxChildLen) {
+						maxChildLen = l;
+						nextNode = child;
+					}
+				}
+				curr = nextNode;
+			}
 			return;
 		}
 
