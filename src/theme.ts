@@ -1,6 +1,6 @@
 // Garden/Earth Theme (os-eco standard branding)
 const colors = {
-	forestGreen: [56, 142, 60],
+	mossGreen: [85, 139, 47],
 	earthBrown: [141, 110, 99],
 	leafGreen: [129, 199, 132],
 	brightGreen: [76, 175, 80],
@@ -16,7 +16,7 @@ function rgb(r: number, g: number, b: number, text: string | number): string {
 
 export const theme = {
 	primary: (text: string | number) =>
-		rgb(colors.forestGreen[0], colors.forestGreen[1], colors.forestGreen[2], text),
+		rgb(colors.mossGreen[0], colors.mossGreen[1], colors.mossGreen[2], text),
 	secondary: (text: string | number) =>
 		rgb(colors.earthBrown[0], colors.earthBrown[1], colors.earthBrown[2], text),
 	accent: (text: string | number) =>

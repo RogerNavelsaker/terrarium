@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="os-eco stacked layers logo featuring terrarium" width="600">
+</p>
+
 # Terrarium
 
 **Terrarium** is the graph analysis and dependency tree tool for the `os-eco` stack. It connects directly with `.seeds/issues.jsonl` to analyze task relationships, build visual dependency graphs, and automatically triage ready issues using network algorithms (PageRank, betweenness, critical paths).
