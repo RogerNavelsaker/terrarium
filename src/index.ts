@@ -48,7 +48,7 @@ program
 		const closedIds = new Set(issues.filter((i) => i.status === "closed").map((i) => i.id));
 		const openIssues = issues.filter((i) => i.status !== "closed");
 
-		const metrics = computeMetrics(openIssues);
+		const { metrics } = computeMetrics(openIssues);
 
 		const ready = openIssues.filter((i) => (i.blockedBy ?? []).every((bid) => closedIds.has(bid)));
 
@@ -153,7 +153,7 @@ program
 		}
 
 		if (opts.bottlenecks) {
-			const metrics = computeMetrics(issues);
+			const { metrics } = computeMetrics(issues);
 			const ranked = issues
 				.map((i) => ({ ...i, betweenness: metrics.get(i.id)?.betweenness ?? 0 }))
 				.filter((i) => i.betweenness > 0)
@@ -169,7 +169,7 @@ program
 		}
 
 		if (opts.criticalPath) {
-			const metrics = computeMetrics(issues);
+			const { metrics } = computeMetrics(issues);
 			let startNode = issues[0]?.id;
 			let maxLen = -1;
 			for (const issue of issues) {
@@ -368,16 +368,23 @@ program
 	.action(async (opts) => {
 		const issues = await loadIssues(program.opts().dir);
 		const openIssues = issues.filter((i) => i.status !== "closed");
-		const metrics = computeMetrics(openIssues);
+		const analysis = computeMetrics(openIssues);
 
 		if (opts.json) {
 			const jsonMetrics: Record<string, unknown> = {};
-			for (const [id, m] of metrics) {
+			for (const [id, m] of analysis.metrics) {
 				jsonMetrics[id] = m;
 			}
 			console.log(
 				JSON.stringify(
-					{ success: true, command: "insights", status: "computed", metrics: jsonMetrics },
+					{
+						success: true,
+						command: "insights",
+						status: "computed",
+						density: analysis.density,
+						cycles: analysis.cycles,
+						metrics: jsonMetrics,
+					},
 					null,
 					2,
 				),
