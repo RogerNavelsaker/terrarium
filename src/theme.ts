@@ -1,14 +1,13 @@
-// Dracula Theme (beads_viewer / os-eco standard branding)
+// Garden/Earth Theme (os-eco standard branding)
 const colors = {
-	purple: [189, 147, 249],
-	pink: [255, 121, 198],
-	cyan: [139, 233, 253],
-	green: [80, 250, 123],
-	yellow: [241, 250, 140],
-	orange: [255, 184, 108],
-	red: [255, 85, 85],
-	comment: [98, 114, 164],
-	foreground: [248, 248, 242],
+	forestGreen: [56, 142, 60],
+	earthBrown: [141, 110, 99],
+	leafGreen: [129, 199, 132],
+	brightGreen: [76, 175, 80],
+	sunlight: [251, 192, 45],
+	rust: [216, 67, 21],
+	stone: [141, 141, 141],
+	cloud: [236, 239, 241],
 };
 
 function rgb(r: number, g: number, b: number, text: string | number): string {
@@ -17,16 +16,17 @@ function rgb(r: number, g: number, b: number, text: string | number): string {
 
 export const theme = {
 	primary: (text: string | number) =>
-		rgb(colors.purple[0], colors.purple[1], colors.purple[2], text),
-	secondary: (text: string | number) => rgb(colors.pink[0], colors.pink[1], colors.pink[2], text),
-	accent: (text: string | number) => rgb(colors.cyan[0], colors.cyan[1], colors.cyan[2], text),
-	success: (text: string | number) => rgb(colors.green[0], colors.green[1], colors.green[2], text),
+		rgb(colors.forestGreen[0], colors.forestGreen[1], colors.forestGreen[2], text),
+	secondary: (text: string | number) =>
+		rgb(colors.earthBrown[0], colors.earthBrown[1], colors.earthBrown[2], text),
+	accent: (text: string | number) =>
+		rgb(colors.leafGreen[0], colors.leafGreen[1], colors.leafGreen[2], text),
+	success: (text: string | number) =>
+		rgb(colors.brightGreen[0], colors.brightGreen[1], colors.brightGreen[2], text),
 	warning: (text: string | number) =>
-		rgb(colors.yellow[0], colors.yellow[1], colors.yellow[2], text),
-	error: (text: string | number) => rgb(colors.red[0], colors.red[1], colors.red[2], text),
-	muted: (text: string | number) =>
-		rgb(colors.comment[0], colors.comment[1], colors.comment[2], text),
-	text: (text: string | number) =>
-		rgb(colors.foreground[0], colors.foreground[1], colors.foreground[2], text),
+		rgb(colors.sunlight[0], colors.sunlight[1], colors.sunlight[2], text),
+	error: (text: string | number) => rgb(colors.rust[0], colors.rust[1], colors.rust[2], text),
+	muted: (text: string | number) => rgb(colors.stone[0], colors.stone[1], colors.stone[2], text),
+	text: (text: string | number) => rgb(colors.cloud[0], colors.cloud[1], colors.cloud[2], text),
 	bold: (text: string | number) => `\x1b[1m${text}\x1b[0m`,
 };
