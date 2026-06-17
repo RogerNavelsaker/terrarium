@@ -431,14 +431,15 @@ export function computeMetrics(issues: Issue[]): GraphAnalysis {
 	const prValues = Array.from(pagerank.values());
 	const maxPr = prValues.reduce((a, b) => Math.max(a, b), 0) || 1;
 	const minPr = Math.min(...prValues);
-	const prRange = maxPr - minPr || 1;
+	const prRange = maxPr > minPr ? maxPr - minPr : maxPr;
+	const basePr = maxPr > minPr ? minPr : 0;
 
 	const bValues = Array.from(betweenness.values());
 	const maxB = bValues.reduce((a, b) => Math.max(a, b), 0) || 1;
 
 	const metrics: IssueMetrics = new Map();
 	for (const id of ids) {
-		const pr = ((pagerank.get(id) ?? 0) - minPr) / prRange;
+		const pr = ((pagerank.get(id) ?? 0) - basePr) / prRange;
 		const b = (betweenness.get(id) ?? 0) / maxB;
 		const cp = (criticalPath.get(id) ?? 0) / maxCp;
 		const score = 0.5 * pr + 0.3 * b + 0.2 * cp;
