@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
-import { Command } from "commander";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { Command } from "commander";
 import { computeMetrics } from "./graph.ts";
 import type { Issue } from "./types.ts";
 
 const program = new Command();
 
 program
-	.name("seeds-viewer")
+	.name("terrarium")
+	.version("0.1.0")
 	.description("CLI tool for seeds graph analysis, designed for agents and tools.")
 	.option("-d, --dir <path>", "Directory containing .seeds", ".");
 
@@ -29,7 +30,7 @@ async function loadIssues(dir: string): Promise<Issue[]> {
 		if (!line.trim()) continue;
 		try {
 			issues.push(JSON.parse(line));
-		} catch (e) {
+		} catch (_e) {
 			console.error("Failed to parse line:", line);
 		}
 	}
@@ -43,7 +44,7 @@ program
 	.option("--limit <n>", "Return top N issues only")
 	.action(async (opts) => {
 		const issues = await loadIssues(program.opts().dir);
-		
+
 		const closedIds = new Set(issues.filter((i) => i.status === "closed").map((i) => i.id));
 		const openIssues = issues.filter((i) => i.status !== "closed");
 
@@ -72,7 +73,13 @@ program
 		const output = limit > 0 ? ranked.slice(0, limit) : ranked;
 
 		if (opts.json) {
-			console.log(JSON.stringify({ success: true, command: "triage", issues: output, count: output.length }, null, 2));
+			console.log(
+				JSON.stringify(
+					{ success: true, command: "triage", issues: output, count: output.length },
+					null,
+					2,
+				),
+			);
 			return;
 		}
 
@@ -98,15 +105,15 @@ program
 	.option("--open-only", "Only include open issues")
 	.action(async (opts) => {
 		let issues = await loadIssues(program.opts().dir);
-		
+
 		if (opts.openOnly) {
 			issues = issues.filter((i) => i.status !== "closed");
 		}
 
 		if (opts.json) {
-			const nodes = issues.map(i => ({ id: i.id, title: i.title, status: i.status }));
+			const nodes = issues.map((i) => ({ id: i.id, title: i.title, status: i.status }));
 			const edges: { source: string; target: string }[] = [];
-			const ids = new Set(issues.map(i => i.id));
+			const ids = new Set(issues.map((i) => i.id));
 			for (const issue of issues) {
 				for (const blocked of issue.blocks ?? []) {
 					if (ids.has(blocked)) edges.push({ source: issue.id, target: blocked });
@@ -118,7 +125,7 @@ program
 
 		const blocksMap = new Map<string, string[]>();
 		const issueMap = new Map<string, Issue>();
-		
+
 		for (const issue of issues) {
 			blocksMap.set(issue.id, issue.blocks ?? []);
 			issueMap.set(issue.id, issue);
@@ -131,28 +138,30 @@ program
 				blockedSet.add(blocked);
 			}
 		}
-		const roots = issues.filter(i => !blockedSet.has(i.id));
+		const roots = issues.filter((i) => !blockedSet.has(i.id));
 
 		function printTree(issueId: string, prefix: string, isLast: boolean, visited: Set<string>) {
 			const issue = issueMap.get(issueId);
 			if (!issue) return;
-			
+
 			const connector = isLast ? "└── " : "├── ";
 			const hasVisited = visited.has(issueId);
-			
+
 			// Color open/closed status
 			const statusColor = issue.status === "closed" ? "\x1b[90m" : "\x1b[32m";
 			const statusStr = `${statusColor}(${issue.status})\x1b[0m`;
-			
-			console.log(`${prefix}${connector}\x1b[1m${issue.id}\x1b[0m ${statusStr} - ${issue.title}${hasVisited ? " \x1b[33m(already shown)\x1b[0m" : ""}`);
-			
+
+			console.log(
+				`${prefix}${connector}\x1b[1m${issue.id}\x1b[0m ${statusStr} - ${issue.title}${hasVisited ? " \x1b[33m(already shown)\x1b[0m" : ""}`,
+			);
+
 			if (hasVisited) return;
 			visited.add(issueId);
-			
+
 			const children = blocksMap.get(issueId) || [];
 			// Filter to ensure children exist in map (in case of open-only filter)
-			const validChildren = children.filter(c => issueMap.has(c));
-			
+			const validChildren = children.filter((c) => issueMap.has(c));
+
 			for (let i = 0; i < validChildren.length; i++) {
 				const newPrefix = prefix + (isLast ? "    " : "│   ");
 				printTree(validChildren[i], newPrefix, i === validChildren.length - 1, visited);

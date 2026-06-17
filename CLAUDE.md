@@ -1,106 +1,74 @@
+# Terrarium CLAUDE.md
 
-Default to using Bun instead of Node.js.
+Graph analysis and dependency tree tool for the `os-eco` stack (connects with `.seeds`).
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+## Quick Reference
 
-## APIs
-
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
-
-## Testing
-
-Use `bun test` to run tests.
-
-```ts#index.test.ts
-import { test, expect } from "bun:test";
-
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+```bash
+terrarium triage              # Rank ready issues using graph algorithms
+terrarium graph               # Print a pretty tree of the dependency graph
+terrarium triage --limit 5    # Top 5 tasks
+terrarium graph --open-only   # Tree with only open tasks
 ```
 
-## Frontend
+## Tech Stack
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+- **Runtime:** Bun (runs TypeScript directly, no build step)
+- **Language:** TypeScript with strict mode (`noUncheckedIndexedAccess`, no `any`)
+- **Linting:** Biome (formatter + linter in one tool)
+- **Runtime dependencies:** `commander` (CLI framework)
+- **Core I/O:** Bun built-in APIs, `node:fs/promises`
 
-Server:
+## Directory Structure
 
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
+```text
+terrarium/
+  package.json
+  tsconfig.json
+  biome.json
+  CLAUDE.md
+  CHANGELOG.md
+  README.md
+  AGENTS.md
+  CONTRIBUTING.md
+  scripts/
+    version-bump.ts            # Bump version in package.json + src/index.ts
+  src/
+    index.ts                   # CLI entry + commander config
+    types.ts                   # Interfaces (Issue, GraphMetrics)
+    graph.ts                   # PageRank, betweenness, critical path algorithms
 ```
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+## Conventions
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
+- **Git-native:** Designed for CLI execution in Git workspaces.
+- **Zero Daemon:** No background processes or servers. Pure CLI tool.
+- **Strict TypeScript:** `noUncheckedIndexedAccess` enabled, no `any`, use `unknown`.
+- **Minimal Dependencies:** Prefer Bun built-in APIs over npm packages.
+- **Standardized Output:** Support for `--json` on all analytical output.
+
+## Quality Gates
+
+Before finishing a task:
+```bash
+bun test                           # Run all tests
+bun run lint                       # Biome check
+bun run typecheck                  # Type check (tsc --noEmit)
 ```
 
-With the following `frontend.tsx`:
+## Session Completion Protocol
 
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
+When ending a work session:
 
-// import .css files directly and it works
-import './index.css';
+1. **File Issues:** Create `sd` issues for remaining or blocked work.
+2. **Quality Gates:** Run all quality gates (test + lint + typecheck).
+3. **Commit & Push:** Ensure all changes are committed and pushed to remote.
+   ```bash
+   git pull --rebase
+   sd sync
+   git push
+   ```
+4. **Hand Off:** Provide a concise summary of current state and next steps.
 
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+<!-- mulch:start -->
+<!-- mulch:end -->
