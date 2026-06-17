@@ -10,7 +10,7 @@ import type { Issue } from "./types.ts";
 const program = new Command();
 
 program
-	.name("trm")
+	.name("tr")
 	.version("0.1.0")
 	.description("CLI tool for seeds graph analysis, designed for agents and tools.")
 	.option("-d, --dir <path>", "Directory containing .seeds", ".")
@@ -27,7 +27,7 @@ program
 			help += `${brand}${B}terrarium${R} ${D}v${version || "0.1.0"}${R} — graph analysis and dependency tree tool\n\n`;
 
 			const isSub = !!cmd.parent;
-			const usage = isSub ? `trm ${cmd.name()} [options]` : `trm <command> [options]`;
+			const usage = isSub ? `tr ${cmd.name()} [options]` : `tr <command> [options]`;
 			help += `${B}Usage:${R} ${usage}\n\n`;
 
 			if (cmd.commands.length > 0) {
@@ -53,7 +53,7 @@ program
 			}
 
 			if (!isSub) {
-				help += `Run ${D}trm <command> --help${R} for command-specific help.\n`;
+				help += `Run ${D}tr <command> --help${R} for command-specific help.\n`;
 			}
 			return help;
 		},
