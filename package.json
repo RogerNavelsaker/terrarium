@@ -16,15 +16,15 @@
 		"bun": ">=1.0.0"
 	},
 	"keywords": ["os-eco", "terrarium", "seeds", "cli", "graph"],
-	"author": "Jaymin West",
+	"author": "Roger Navelsaker",
 	"license": "MIT",
-	"homepage": "https://github.com/jayminwest/terrarium#readme",
+	"homepage": "https://github.com/RogerNavelsaker/terrarium#readme",
 	"bugs": {
-		"url": "https://github.com/jayminwest/terrarium/issues"
+		"url": "https://github.com/RogerNavelsaker/terrarium/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/jayminwest/terrarium.git"
+		"url": "https://github.com/RogerNavelsaker/terrarium.git"
 	},
 	"scripts": {
 		"test": "bun test",
