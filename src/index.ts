@@ -102,6 +102,7 @@ program
 	.command("graph")
 	.description("Print a pretty tree of the dependency graph")
 	.option("--json", "Output nodes and edges as JSON")
+	.option("--dot", "Output in Graphviz DOT format")
 	.option("--open-only", "Only include open issues")
 	.action(async (opts) => {
 		let issues = await loadIssues(program.opts().dir);
@@ -120,6 +121,32 @@ program
 				}
 			}
 			console.log(JSON.stringify({ success: true, command: "graph", nodes, edges }, null, 2));
+			return;
+		}
+
+		if (opts.dot) {
+			console.log("digraph G {");
+			console.log('  node [shape=box, style=rounded, fontname="sans-serif"];');
+			console.log('  edge [fontname="sans-serif"];');
+			console.log("  rankdir=LR;");
+
+			const ids = new Set(issues.map((i) => i.id));
+			for (const issue of issues) {
+				const color = issue.status === "closed" ? "gray" : "black";
+				const title = issue.title.replace(/"/g, '\\"');
+				console.log(
+					`  "${issue.id}" [label="${issue.id}\\n${title}", color="${color}", fontcolor="${color}"];`,
+				);
+			}
+
+			for (const issue of issues) {
+				for (const blocked of issue.blocks ?? []) {
+					if (ids.has(blocked)) {
+						console.log(`  "${issue.id}" -> "${blocked}";`);
+					}
+				}
+			}
+			console.log("}");
 			return;
 		}
 
