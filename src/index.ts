@@ -240,10 +240,10 @@ program
 				const issue = issues.find((i) => i.id === curr);
 				if (!issue) break;
 				console.log(`${theme.success("↓")} ${theme.bold(issue.id)} ${issue.title}`);
-				const children = blocksMap.get(curr) ?? [];
+				const children: string[] = blocksMap.get(curr) ?? [];
 				if (children.length === 0) break;
 
-				let nextNode = children[0];
+				let nextNode: string | undefined = children[0];
 				let maxChildLen = -1;
 				for (const child of children) {
 					const l = metrics.get(child)?.criticalPathLength ?? 0;
@@ -300,18 +300,18 @@ program
 
 			for (let i = 0; i < validChildren.length; i++) {
 				const newPrefix = prefix + (isLast ? "    " : "│   ");
-				printTree(validChildren[i], newPrefix, i === validChildren.length - 1, visited);
+				printTree(validChildren[i]!, newPrefix, i === validChildren.length - 1, visited);
 			}
 		}
 
 		if (roots.length === 0 && issues.length > 0) {
 			console.log(theme.msgWarn("Graph has cycles and no roots. Showing arbitrary nodes."));
-			roots.push(issues[0]);
+			roots.push(issues[0]!);
 		}
 
 		const visited = new Set<string>();
 		for (let i = 0; i < roots.length; i++) {
-			printTree(roots[i].id, "", i === roots.length - 1, visited);
+			printTree(roots[i]!.id, "", i === roots.length - 1, visited);
 			if (i < roots.length - 1) console.log(""); // spacing
 		}
 	});
@@ -404,7 +404,7 @@ program
 		console.log(theme.bold("Execution Plan (Topological Tracks)\n"));
 		for (let i = 0; i < tracks.length; i++) {
 			console.log(`${theme.primary(`Track ${i}`)} (Parallelizable)`);
-			for (const issue of tracks[i]) {
+			for (const issue of tracks[i]!) {
 				console.log(`  ${theme.bold(issue.id)} - ${issue.title}`);
 			}
 			console.log("");
@@ -427,7 +427,7 @@ program
 		const suggestions = [];
 		for (let i = 0; i < ranked.length; i++) {
 			const issue = ranked[i];
-			const currentPriority = issue.priority || 5;
+			const currentPriority = issue!.priority || 5;
 
 			const percentile = i / ranked.length;
 			let suggested = 5;
@@ -438,8 +438,8 @@ program
 
 			if (suggested !== currentPriority) {
 				suggestions.push({
-					id: issue.id,
-					title: issue.title,
+					id: issue!.id,
+					title: issue!.title,
 					current: currentPriority,
 					suggested,
 					reason:

@@ -23,238 +23,226 @@ export interface GraphAnalysis {
 	cycles: string[][];
 }
 
-function buildAdjacency(issues: Issue[]): {
-	blocksMap: Map<string, string[]>;
-	blockedByMap: Map<string, string[]>;
-	ids: string[];
-} {
+function buildAdjacency(issues: Issue[]) {
 	const ids = issues.map((i) => i.id);
-	const idSet = new Set(ids);
-	const blocksMap = new Map<string, string[]>();
-	const blockedByMap = new Map<string, string[]>();
+	const n = ids.length;
+	const idToIndex = new Map<string, number>();
+	for (let i = 0; i < n; i++) idToIndex.set(ids[i]!, i);
 
-	for (const id of ids) {
-		blocksMap.set(id, []);
-		blockedByMap.set(id, []);
-	}
+	const blocks = Array.from({ length: n }, () => [] as number[]);
+	const blockedBy = Array.from({ length: n }, () => [] as number[]);
 
-	for (const issue of issues) {
+	for (let i = 0; i < n; i++) {
+		const issue = issues[i]!;
 		for (const blocked of issue.blocks ?? []) {
-			if (!idSet.has(blocked)) continue;
-			blocksMap.get(issue.id)?.push(blocked);
-			blockedByMap.get(blocked)?.push(issue.id);
+			const targetIdx = idToIndex.get(blocked);
+			if (targetIdx !== undefined) {
+				blocks[i]!.push(targetIdx);
+				blockedBy[targetIdx]!.push(i);
+			}
 		}
 	}
-
-	return { blocksMap, blockedByMap, ids };
+	return { blocks, blockedBy, ids, idToIndex };
 }
 
-function computePageRank(
-	ids: string[],
-	blocksMap: Map<string, string[]>,
-	blockedByMap: Map<string, string[]>,
-	iterations = 50,
-	damping = 0.85,
-): Map<string, number> {
-	const n = ids.length;
-	if (n === 0) return new Map();
-
-	const rank = new Map<string, number>();
+function computePageRank(n: number, blocks: number[][], blockedBy: number[][], iterations = 50, damping = 0.85): Float64Array {
+	if (n === 0) return new Float64Array(0);
+	
+	let rank = new Float64Array(n);
+	let next = new Float64Array(n);
 	const initial = 1 / n;
-	for (const id of ids) rank.set(id, initial);
+	rank.fill(initial);
 
 	for (let iter = 0; iter < iterations; iter++) {
-		const next = new Map<string, number>();
-		for (const id of ids) {
+		for (let i = 0; i < n; i++) {
 			let incoming = 0;
-			for (const dep of blocksMap.get(id) ?? []) {
-				const depReversedOut = blockedByMap.get(dep)?.length ?? 0;
+			const deps = blocks[i]!;
+			for (let j = 0; j < deps.length; j++) {
+				const dep = deps[j]!;
+				const depReversedOut = blockedBy[dep]!.length;
 				if (depReversedOut > 0) {
-					incoming += (rank.get(dep) ?? 0) / depReversedOut;
+					incoming += rank[dep]! / depReversedOut;
 				}
 			}
-			next.set(id, (1 - damping) / n + damping * incoming);
+			next[i] = (1 - damping) / n + damping * incoming;
 		}
-		for (const [id, r] of next) rank.set(id, r);
+		const temp = rank;
+		rank = next;
+		next = temp;
 	}
-
 	return rank;
 }
 
-function computeBetweenness(ids: string[], blocksMap: Map<string, string[]>): Map<string, number> {
-	const betweenness = new Map<string, number>();
-	for (const id of ids) betweenness.set(id, 0);
+function computeBetweenness(n: number, blocks: number[][]): Float64Array {
+	const betweenness = new Float64Array(n);
+	const sigma = new Float64Array(n);
+	const dist = new Int32Array(n);
+	const delta = new Float64Array(n);
+	
+	const queue = new Int32Array(n);
+	const stack = new Int32Array(n);
+	const predecessors: number[][] = Array.from({ length: n }, () => []);
 
-	for (const source of ids) {
-		const stack: string[] = [];
-		const predecessors = new Map<string, string[]>();
-		const sigma = new Map<string, number>();
-		const dist = new Map<string, number>();
+	for (let source = 0; source < n; source++) {
+		sigma.fill(0);
+		dist.fill(-1);
+		for (let i = 0; i < n; i++) predecessors[i]!.length = 0;
 
-		for (const id of ids) {
-			predecessors.set(id, []);
-			sigma.set(id, 0);
-			dist.set(id, -1);
-		}
+		sigma[source] = 1;
+		dist[source] = 0;
 
-		sigma.set(source, 1);
-		dist.set(source, 0);
+		let qHead = 0, qTail = 0;
+		let sTop = 0;
 
-		const queue: string[] = [source];
-		while (queue.length > 0) {
-			const v = queue.shift();
-			if (v === undefined) break;
-			stack.push(v);
-			for (const w of blocksMap.get(v) ?? []) {
-				if (dist.get(w) === -1) {
-					queue.push(w);
-					dist.set(w, (dist.get(v) ?? 0) + 1);
+		queue[qTail++] = source;
+
+		while (qHead < qTail) {
+			const v = queue[qHead++]!;
+			stack[sTop++] = v;
+			
+			const neighbors = blocks[v]!;
+			for (let i = 0; i < neighbors.length; i++) {
+				const w = neighbors[i]!;
+				if (dist[w] === -1) {
+					queue[qTail++] = w;
+					dist[w] = dist[v]! + 1;
 				}
-				if (dist.get(w) === (dist.get(v) ?? 0) + 1) {
-					sigma.set(w, (sigma.get(w) ?? 0) + (sigma.get(v) ?? 0));
-					predecessors.get(w)?.push(v);
+				if (dist[w] === dist[v]! + 1) {
+					sigma[w]! += sigma[v]!;
+					predecessors[w]!.push(v);
 				}
 			}
 		}
 
-		const delta = new Map<string, number>();
-		for (const id of ids) delta.set(id, 0);
+		delta.fill(0);
 
-		while (stack.length > 0) {
-			const w = stack.pop();
-			if (w === undefined) break;
-			for (const v of predecessors.get(w) ?? []) {
-				const contribution =
-					((sigma.get(v) ?? 0) / (sigma.get(w) ?? 1)) * (1 + (delta.get(w) ?? 0));
-				delta.set(v, (delta.get(v) ?? 0) + contribution);
+		while (sTop > 0) {
+			const w = stack[--sTop]!;
+			const preds = predecessors[w]!;
+			for (let i = 0; i < preds.length; i++) {
+				const v = preds[i]!;
+				delta[v]! += (sigma[v]! / (sigma[w] || 1)) * (1 + delta[w]!);
 			}
 			if (w !== source) {
-				betweenness.set(w, (betweenness.get(w) ?? 0) + (delta.get(w) ?? 0));
+				betweenness[w]! += delta[w]!;
 			}
 		}
 	}
 
-	const n = ids.length;
 	const norm = n > 2 ? (n - 1) * (n - 2) : 1;
-	for (const [id, b] of betweenness) {
-		betweenness.set(id, b / norm);
+	for (let i = 0; i < n; i++) {
+		betweenness[i]! /= norm;
 	}
 
 	return betweenness;
 }
 
-function computeCriticalPath(ids: string[], blocksMap: Map<string, string[]>): Map<string, number> {
-	const memo = new Map<string, number>();
+function computeCriticalPath(n: number, blocks: number[][]): Int32Array {
+	const memo = new Int32Array(n).fill(-1);
+	const visiting = new Uint8Array(n);
 
-	const dfs = (id: string): number => {
-		const cached = memo.get(id);
-		if (cached !== undefined) return cached;
-		const successors = blocksMap.get(id) ?? [];
-		if (successors.length === 0) {
-			memo.set(id, 0);
-			return 0;
+	const dfs = (i: number): number => {
+		if (memo[i] !== -1) return memo[i]!;
+		if (visiting[i]) return 0;
+
+		visiting[i] = 1;
+		let max = 0;
+		const successors = blocks[i]!;
+		for (let j = 0; j < successors.length; j++) {
+			const d = dfs(successors[j]!);
+			if (d > max) max = d;
 		}
-		const max = Math.max(...successors.map(dfs));
-		memo.set(id, max + 1);
-		return max + 1;
+		visiting[i] = 0;
+
+		const res = successors.length > 0 ? max + 1 : 0;
+		memo[i] = res;
+		return res;
 	};
 
-	for (const id of ids) dfs(id);
+	for (let i = 0; i < n; i++) dfs(i);
 	return memo;
 }
 
-function computeHITS(
-	ids: string[],
-	blocksMap: Map<string, string[]>,
-	blockedByMap: Map<string, string[]>,
-	iterations = 50,
-) {
-	const hubs = new Map<string, number>();
-	const auths = new Map<string, number>();
-	for (const id of ids) {
-		hubs.set(id, 1);
-		auths.set(id, 1);
-	}
+function computeHITS(n: number, blocks: number[][], blockedBy: number[][], iterations = 50) {
+	const hubs = new Float64Array(n).fill(1);
+	const auths = new Float64Array(n).fill(1);
+	const nextAuths = new Float64Array(n);
+	const nextHubs = new Float64Array(n);
 
 	for (let i = 0; i < iterations; i++) {
 		let normAuth = 0;
-		for (const id of ids) {
+		for (let j = 0; j < n; j++) {
 			let auth = 0;
-			for (const dependent of blocksMap.get(id) ?? []) {
-				auth += hubs.get(dependent) ?? 0;
-			}
-			auths.set(id, auth);
+			const deps = blocks[j]!;
+			for (let k = 0; k < deps.length; k++) auth += hubs[deps[k]!]!;
+			nextAuths[j] = auth;
 			normAuth += auth * auth;
 		}
 		normAuth = Math.sqrt(normAuth) || 1;
-		for (const id of ids) auths.set(id, (auths.get(id) ?? 0) / normAuth);
+		for (let j = 0; j < n; j++) auths[j] = nextAuths[j]! / normAuth;
 
 		let normHub = 0;
-		for (const id of ids) {
+		for (let j = 0; j < n; j++) {
 			let hub = 0;
-			for (const dependency of blockedByMap.get(id) ?? []) {
-				hub += auths.get(dependency) ?? 0;
-			}
-			hubs.set(id, hub);
+			const preds = blockedBy[j]!;
+			for (let k = 0; k < preds.length; k++) hub += auths[preds[k]!]!;
+			nextHubs[j] = hub;
 			normHub += hub * hub;
 		}
 		normHub = Math.sqrt(normHub) || 1;
-		for (const id of ids) hubs.set(id, (hubs.get(id) ?? 0) / normHub);
+		for (let j = 0; j < n; j++) hubs[j] = nextHubs[j]! / normHub;
 	}
 	return { hubs, auths };
 }
 
-function computeEigenvector(ids: string[], blocksMap: Map<string, string[]>, iterations = 50) {
-	const ev = new Map<string, number>();
-	for (const id of ids) ev.set(id, 1);
+function computeEigenvector(n: number, blocks: number[][], iterations = 50) {
+	const ev = new Float64Array(n).fill(1);
+	const next = new Float64Array(n);
 
 	for (let i = 0; i < iterations; i++) {
-		const next = new Map<string, number>();
 		let norm = 0;
-		for (const id of ids) {
+		for (let j = 0; j < n; j++) {
 			let sum = 0;
-			for (const dependent of blocksMap.get(id) ?? []) {
-				sum += ev.get(dependent) ?? 0;
-			}
-			next.set(id, sum);
+			const deps = blocks[j]!;
+			for (let k = 0; k < deps.length; k++) sum += ev[deps[k]!]!;
+			next[j] = sum;
 			norm += sum * sum;
 		}
 		norm = Math.sqrt(norm) || 1;
-		for (const id of ids) ev.set(id, (next.get(id) ?? 0) / norm);
+		for (let j = 0; j < n; j++) ev[j] = next[j]! / norm;
 	}
 	return ev;
 }
 
-function findCycles(ids: string[], blocksMap: Map<string, string[]>): string[][] {
+function findCycles(n: number, blocks: number[][], ids: string[]): string[][] {
 	const cycles: string[][] = [];
-	const visited = new Set<string>();
-	const stack = new Set<string>();
-	const path: string[] = [];
+	const visited = new Uint8Array(n);
+	const inStack = new Uint8Array(n);
+	const path: number[] = [];
 
-	const dfs = (node: string) => {
-		if (stack.has(node)) {
+	const dfs = (node: number) => {
+		if (inStack[node]) {
 			const idx = path.indexOf(node);
-			cycles.push(path.slice(idx));
+			cycles.push(path.slice(idx).map(i => ids[i]!));
 			return;
 		}
-		if (visited.has(node)) return;
+		if (visited[node]) return;
 
-		visited.add(node);
-		stack.add(node);
+		visited[node] = 1;
+		inStack[node] = 1;
 		path.push(node);
 
-		for (const neighbor of blocksMap.get(node) ?? []) {
-			dfs(neighbor);
+		const successors = blocks[node]!;
+		for (let i = 0; i < successors.length; i++) {
+			dfs(successors[i]!);
 		}
 
 		path.pop();
-		stack.delete(node);
+		inStack[node] = 0;
 	};
 
-	for (const id of ids) {
-		if (!visited.has(id)) {
-			dfs(id);
-		}
+	for (let i = 0; i < n; i++) {
+		if (!visited[i]) dfs(i);
 	}
 
 	const unique = new Set<string>();
@@ -266,80 +254,79 @@ function findCycles(ids: string[], blocksMap: Map<string, string[]>): string[][]
 			result.push(c);
 		}
 	}
-
 	return result;
 }
 
-function computeSlack(
-	ids: string[],
-	_blocksMap: Map<string, string[]>,
-	blockedByMap: Map<string, string[]>,
-	criticalPath: Map<string, number>,
-): Map<string, number> {
-	const es = new Map<string, number>();
-	const memo = new Map<string, number>();
+function computeSlack(n: number, blockedBy: number[][], criticalPath: Int32Array): Int32Array {
+	const es = new Int32Array(n).fill(-1);
+	const visiting = new Uint8Array(n);
 
-	const dfsES = (id: string): number => {
-		if (memo.has(id)) return memo.get(id) ?? 0;
-		const predecessors = blockedByMap.get(id) ?? [];
-		if (predecessors.length === 0) {
-			memo.set(id, 0);
-			return 0;
+	const dfsES = (i: number): number => {
+		if (es[i] !== -1) return es[i]!;
+		if (visiting[i]) return 0;
+		visiting[i] = 1;
+
+		const predecessors = blockedBy[i]!;
+		let max = 0;
+		for (let j = 0; j < predecessors.length; j++) {
+			const d = dfsES(predecessors[j]!);
+			if (d > max) max = d;
 		}
-		const max = Math.max(...predecessors.map(dfsES));
-		memo.set(id, max + 1);
-		return max + 1;
+		visiting[i] = 0;
+		const res = predecessors.length > 0 ? max + 1 : 0;
+		es[i] = res;
+		return res;
 	};
 
-	for (const id of ids) {
-		es.set(id, dfsES(id));
+	for (let i = 0; i < n; i++) dfsES(i);
+
+	let maxCp = 0;
+	for (let i = 0; i < n; i++) {
+		if (criticalPath[i]! > maxCp) maxCp = criticalPath[i]!;
 	}
+	if (maxCp === 0) maxCp = 1;
 
-	const maxCp = Array.from(criticalPath.values()).reduce((a, b) => Math.max(a, b), 0) || 1;
-	const slack = new Map<string, number>();
-
-	for (const id of ids) {
-		const nodeES = es.get(id) ?? 0;
-		const nodeCP = criticalPath.get(id) ?? 0;
-		slack.set(id, maxCp - nodeES - nodeCP);
+	const slack = new Int32Array(n);
+	for (let i = 0; i < n; i++) {
+		slack[i] = maxCp - es[i]! - criticalPath[i]!;
 	}
 
 	return slack;
 }
 
-function computeKCores(
-	ids: string[],
-	blocksMap: Map<string, string[]>,
-	blockedByMap: Map<string, string[]>,
-): Map<string, number> {
-	const degree = new Map<string, number>();
-	const adj = new Map<string, Set<string>>();
+function computeKCores(n: number, blocks: number[][], blockedBy: number[][]): Int32Array {
+	const degree = new Int32Array(n);
+	const adj = Array.from({ length: n }, () => new Set<number>());
 
-	for (const id of ids) {
-		const neighbors = new Set([...(blocksMap.get(id) ?? []), ...(blockedByMap.get(id) ?? [])]);
-		adj.set(id, neighbors);
-		degree.set(id, neighbors.size);
+	for (let i = 0; i < n; i++) {
+		const neighbors = new Set<number>();
+		for (const x of blocks[i]!) neighbors.add(x);
+		for (const x of blockedBy[i]!) neighbors.add(x);
+		adj[i] = neighbors;
+		degree[i] = neighbors.size;
 	}
 
-	const coreNumber = new Map<string, number>();
-	const remaining = new Set(ids);
-	let k = 0;
+	const coreNumber = new Int32Array(n);
+	const remaining = new Set<number>();
+	for (let i = 0; i < n; i++) remaining.add(i);
 
+	let k = 0;
 	while (remaining.size > 0) {
 		let removed = false;
 		do {
 			removed = false;
-			const toRemove: string[] = [];
+			const toRemove: number[] = [];
 			for (const id of remaining) {
-				if ((degree.get(id) ?? 0) <= k) {
+				if (degree[id]! <= k) {
 					toRemove.push(id);
 				}
 			}
-			for (const id of toRemove) {
+			for (let i = 0; i < toRemove.length; i++) {
+				const id = toRemove[i]!;
 				remaining.delete(id);
-				coreNumber.set(id, k);
-				for (const neighbor of adj.get(id) ?? []) {
-					degree.set(neighbor, (degree.get(neighbor) ?? 0) - 1);
+				coreNumber[id] = k;
+				for (const neighbor of adj[id]!) {
+					degree[neighbor]!--;
 				}
 				removed = true;
 			}
@@ -350,57 +337,49 @@ function computeKCores(
 	return coreNumber;
 }
 
-function computeArticulationPoints(
-	ids: string[],
-	blocksMap: Map<string, string[]>,
-	blockedByMap: Map<string, string[]>,
-): Set<string> {
-	const adj = new Map<string, string[]>();
-	for (const id of ids) {
-		const neighbors = Array.from(
-			new Set([...(blocksMap.get(id) ?? []), ...(blockedByMap.get(id) ?? [])]),
-		);
-		adj.set(id, neighbors);
+function computeArticulationPoints(n: number, blocks: number[][], blockedBy: number[][]): Uint8Array {
+	const adj: number[][] = Array.from({ length: n }, () => []);
+	for (let i = 0; i < n; i++) {
+		const neighbors = new Set<number>();
+		for (const x of blocks[i]!) neighbors.add(x);
+		for (const x of blockedBy[i]!) neighbors.add(x);
+		adj[i] = Array.from(neighbors);
 	}
 
 	let time = 0;
-	const discovery = new Map<string, number>();
-	const low = new Map<string, number>();
-	const parent = new Map<string, string | null>();
-	const articulation = new Set<string>();
+	const discovery = new Int32Array(n).fill(-1);
+	const low = new Int32Array(n).fill(-1);
+	const parent = new Int32Array(n).fill(-1);
+	const articulation = new Uint8Array(n);
 
-	const dfs = (u: string) => {
+	const dfs = (u: number) => {
 		let children = 0;
-		discovery.set(u, ++time);
-		low.set(u, time);
+		discovery[u] = ++time;
+		low[u] = time;
 
-		for (const v of adj.get(u) ?? []) {
-			if (!discovery.has(v)) {
+		for (const v of adj[u]!) {
+			if (discovery[v] === -1) {
 				children++;
-				parent.set(v, u);
+				parent[v] = u;
 				dfs(v);
 
-				low.set(u, Math.min(low.get(u) ?? 0, low.get(v) ?? 0));
+				low[u] = Math.min(low[u]!, low[v]!);
 
-				if (parent.get(u) === null && children > 1) {
-					articulation.add(u);
+				if (parent[u] === -1 && children > 1) {
+					articulation[u] = 1;
 				}
-				if (parent.get(u) !== null && (low.get(v) ?? 0) >= (discovery.get(u) ?? 0)) {
-					articulation.add(u);
+				if (parent[u] !== -1 && low[v]! >= discovery[u]!) {
+					articulation[u] = 1;
 				}
-			} else if (v !== parent.get(u)) {
-				low.set(u, Math.min(low.get(u) ?? 0, discovery.get(v) ?? 0));
+			} else if (v !== parent[u]) {
+				low[u] = Math.min(low[u]!, discovery[v]!);
 			}
 		}
 	};
 
-	for (const id of ids) {
-		parent.set(id, null);
-	}
-
-	for (const id of ids) {
-		if (!discovery.has(id)) {
-			dfs(id);
+	for (let i = 0; i < n; i++) {
+		if (discovery[i] === -1) {
+			dfs(i);
 		}
 	}
 
@@ -410,53 +389,66 @@ function computeArticulationPoints(
 export function computeMetrics(issues: Issue[]): GraphAnalysis {
 	if (issues.length === 0) return { metrics: new Map(), density: 0, cycles: [] };
 
-	const { blocksMap, blockedByMap, ids } = buildAdjacency(issues);
+	const { blocks, blockedBy, ids } = buildAdjacency(issues);
+	const n = ids.length;
 
-	const pagerank = computePageRank(ids, blocksMap, blockedByMap);
-	const betweenness = computeBetweenness(ids, blocksMap);
-	const criticalPath = computeCriticalPath(ids, blocksMap);
-	const { hubs, auths } = computeHITS(ids, blocksMap, blockedByMap);
-	const eigenvector = computeEigenvector(ids, blocksMap);
-	const cycles = findCycles(ids, blocksMap);
-	const slack = computeSlack(ids, blocksMap, blockedByMap, criticalPath);
-	const coreNumber = computeKCores(ids, blocksMap, blockedByMap);
-	const articulation = computeArticulationPoints(ids, blocksMap, blockedByMap);
+	const pagerank = computePageRank(n, blocks, blockedBy);
+	const betweenness = computeBetweenness(n, blocks);
+	const criticalPath = computeCriticalPath(n, blocks);
+	const { hubs, auths } = computeHITS(n, blocks, blockedBy);
+	const eigenvector = computeEigenvector(n, blocks);
+	const cycles = findCycles(n, blocks, ids);
+	const slack = computeSlack(n, blockedBy, criticalPath);
+	const coreNumber = computeKCores(n, blocks, blockedBy);
+	const articulation = computeArticulationPoints(n, blocks, blockedBy);
 
 	let edgeCount = 0;
-	for (const deps of blocksMap.values()) edgeCount += deps.length;
-	const density = ids.length > 1 ? edgeCount / (ids.length * (ids.length - 1)) : 0;
+	for (let i = 0; i < n; i++) edgeCount += blocks[i]!.length;
+	const density = n > 1 ? edgeCount / (n * (n - 1)) : 0;
 
-	const maxCp = Array.from(criticalPath.values()).reduce((a, b) => Math.max(a, b), 0) || 1;
+	let maxCp = 0;
+	for (let i = 0; i < n; i++) {
+		if (criticalPath[i]! > maxCp) maxCp = criticalPath[i]!;
+	}
+	if (maxCp === 0) maxCp = 1;
 
-	const prValues = Array.from(pagerank.values());
-	const maxPr = prValues.reduce((a, b) => Math.max(a, b), 0) || 1;
-	const minPr = Math.min(...prValues);
+	let maxPr = 0;
+	let minPr = Number.POSITIVE_INFINITY;
+	for (let i = 0; i < n; i++) {
+		if (pagerank[i]! > maxPr) maxPr = pagerank[i]!;
+		if (pagerank[i]! < minPr) minPr = pagerank[i]!;
+	}
+	if (maxPr === 0) maxPr = 1;
+	if (minPr === Number.POSITIVE_INFINITY) minPr = 0;
 	const prRange = maxPr > minPr ? maxPr - minPr : maxPr;
 	const basePr = maxPr > minPr ? minPr : 0;
 
-	const bValues = Array.from(betweenness.values());
-	const maxB = bValues.reduce((a, b) => Math.max(a, b), 0) || 1;
+	let maxB = 0;
+	for (let i = 0; i < n; i++) {
+		if (betweenness[i]! > maxB) maxB = betweenness[i]!;
+	}
+	if (maxB === 0) maxB = 1;
 
 	const metrics: IssueMetrics = new Map();
-	for (const id of ids) {
-		const pr = ((pagerank.get(id) ?? 0) - basePr) / prRange;
-		const b = (betweenness.get(id) ?? 0) / maxB;
-		const cp = (criticalPath.get(id) ?? 0) / maxCp;
+	for (let i = 0; i < n; i++) {
+		const pr = (pagerank[i]! - basePr) / prRange;
+		const b = betweenness[i]! / maxB;
+		const cp = criticalPath[i]! / maxCp;
 		const score = 0.5 * pr + 0.3 * b + 0.2 * cp;
 
-		metrics.set(id, {
-			pagerank: pagerank.get(id) ?? 0,
-			betweenness: betweenness.get(id) ?? 0,
-			criticalPathLength: criticalPath.get(id) ?? 0,
-			hitsAuthority: auths.get(id) ?? 0,
-			hitsHub: hubs.get(id) ?? 0,
-			eigenvector: eigenvector.get(id) ?? 0,
-			inDegree: blocksMap.get(id)?.length ?? 0,
-			outDegree: blockedByMap.get(id)?.length ?? 0,
+		metrics.set(ids[i]!, {
+			pagerank: pagerank[i]!,
+			betweenness: betweenness[i]!,
+			criticalPathLength: criticalPath[i]!,
+			hitsAuthority: auths[i]!,
+			hitsHub: hubs[i]!,
+			eigenvector: eigenvector[i]!,
+			inDegree: blockedBy[i]!.length,
+			outDegree: blocks[i]!.length,
+			slack: slack[i]!,
+			coreNumber: coreNumber[i]!,
+			isArticulationPoint: articulation[i] === 1,
 			score,
-			slack: slack.get(id) ?? 0,
-			coreNumber: coreNumber.get(id) ?? 0,
-			isArticulationPoint: articulation.has(id),
 		});
 	}
 
