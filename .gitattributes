@@ -8,3 +8,4 @@
 
 .trellis/events.jsonl merge=union
 .trellis/handoffs/*.jsonl merge=union
+.seeds/plans.jsonl merge=union

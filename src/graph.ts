@@ -45,9 +45,15 @@ function buildAdjacency(issues: Issue[]) {
 	return { blocks, blockedBy, ids, idToIndex };
 }
 
-function computePageRank(n: number, blocks: number[][], blockedBy: number[][], iterations = 50, damping = 0.85): Float64Array {
+function computePageRank(
+	n: number,
+	blocks: number[][],
+	blockedBy: number[][],
+	iterations = 50,
+	damping = 0.85,
+): Float64Array {
 	if (n === 0) return new Float64Array(0);
-	
+
 	let rank = new Float64Array(n);
 	let next = new Float64Array(n);
 	const initial = 1 / n;
@@ -78,7 +84,7 @@ function computeBetweenness(n: number, blocks: number[][]): Float64Array {
 	const sigma = new Float64Array(n);
 	const dist = new Int32Array(n);
 	const delta = new Float64Array(n);
-	
+
 	const queue = new Int32Array(n);
 	const stack = new Int32Array(n);
 	const predecessors: number[][] = Array.from({ length: n }, () => []);
@@ -91,7 +97,8 @@ function computeBetweenness(n: number, blocks: number[][]): Float64Array {
 		sigma[source] = 1;
 		dist[source] = 0;
 
-		let qHead = 0, qTail = 0;
+		let qHead = 0,
+			qTail = 0;
 		let sTop = 0;
 
 		queue[qTail++] = source;
@@ -99,7 +106,7 @@ function computeBetweenness(n: number, blocks: number[][]): Float64Array {
 		while (qHead < qTail) {
 			const v = queue[qHead++]!;
 			stack[sTop++] = v;
-			
+
 			const neighbors = blocks[v]!;
 			for (let i = 0; i < neighbors.length; i++) {
 				const w = neighbors[i]!;
@@ -223,7 +230,7 @@ function findCycles(n: number, blocks: number[][], ids: string[]): string[][] {
 	const dfs = (node: number) => {
 		if (inStack[node]) {
 			const idx = path.indexOf(node);
-			cycles.push(path.slice(idx).map(i => ids[i]!));
+			cycles.push(path.slice(idx).map((i) => ids[i]!));
 			return;
 		}
 		if (visited[node]) return;
@@ -337,7 +344,11 @@ function computeKCores(n: number, blocks: number[][], blockedBy: number[][]): In
 	return coreNumber;
 }
 
-function computeArticulationPoints(n: number, blocks: number[][], blockedBy: number[][]): Uint8Array {
+function computeArticulationPoints(
+	n: number,
+	blocks: number[][],
+	blockedBy: number[][],
+): Uint8Array {
 	const adj: number[][] = Array.from({ length: n }, () => []);
 	for (let i = 0; i < n; i++) {
 		const neighbors = new Set<number>();
